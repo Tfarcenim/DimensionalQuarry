@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:block/cube_all",
+  "textures": {
+    "all": "dimensionalquarry:block/dimensional_quarry"
+  }
+}
