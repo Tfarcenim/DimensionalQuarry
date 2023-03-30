@@ -8,34 +8,30 @@ import tfar.dimensionalquarry.network.PacketHandler;
 import tfar.dimensionalquarry.network.util.C2SPacketHelper;
 
 
-public class C2SAddPredicatePacket implements C2SPacketHelper {
+public class C2SRemovePredicatePacket implements C2SPacketHelper {
 
-    private final String string;
-    private final boolean tag;
-    public C2SAddPredicatePacket(String string, boolean tag) {
-        this.string = string;
-        this.tag = tag;
+    private final String i;
+    public C2SRemovePredicatePacket(String i) {
+        this.i = i;
     }
 
-    public C2SAddPredicatePacket(FriendlyByteBuf buf) {
-        string = buf.readUtf();
-        tag = buf.readBoolean();
+    public C2SRemovePredicatePacket(FriendlyByteBuf buf) {
+        i= buf.readUtf();
     }
 
     @Override
     public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(string);
-        buf.writeBoolean(tag);
+        buf.writeUtf(i);
     }
 
-    public static void send(String id,boolean tag) {
-        PacketHandler.sendToServer(new C2SAddPredicatePacket(id,tag));
+    public static void send(String i) {
+        PacketHandler.sendToServer(new C2SRemovePredicatePacket(i));
     }
 
     public void handleServer(ServerPlayer player) {
         AbstractContainerMenu container = player.containerMenu;
         if (container instanceof FilterMenu filterMenu) {
-            boolean success = filterMenu.addPredicate(string,tag);
+            boolean success = filterMenu.removePredicate(i);
             if (success)
                 filterMenu.sendToClient(player);
         }

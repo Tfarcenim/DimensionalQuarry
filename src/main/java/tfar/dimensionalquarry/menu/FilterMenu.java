@@ -1,25 +1,32 @@
 package tfar.dimensionalquarry.menu;
 
-import com.mojang.datafixers.util.Pair;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.tags.ITag;
 import org.jetbrains.annotations.Nullable;
 import tfar.dimensionalquarry.init.ModOs;
 import tfar.dimensionalquarry.network.PacketHandler;
 import tfar.dimensionalquarry.network.client.S2CCustomSyncDataPacket;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class FilterMenu extends AbstractContainerMenu {
 
-    private List<Pair<String,Boolean>> predicates;
+    private Map<String,Boolean> predicates;
 
     ItemStack filter;
 
@@ -36,25 +43,25 @@ public class FilterMenu extends AbstractContainerMenu {
         predicates = loadPredicates(filter);
     }
 
-    public static List<Pair<String,Boolean>> loadPredicates(ItemStack stack) {
-        List<Pair<String,Boolean>> list = new ArrayList<>();
+    public static Map<String,Boolean> loadPredicates(ItemStack stack) {
+        Map<String,Boolean> list = new HashMap<>();
 
         CompoundTag tag = stack.getTagElement(TAG);
         if (tag != null) {
             for (String s : tag.getAllKeys()) {
-                list.add(Pair.of(s,tag.getBoolean(s)));
+                list.put(s,tag.getBoolean(s));
             }
         }
         return list;
     }
 
-    public static void savePredicates(List<Pair<String,Boolean>> predicates,ItemStack stack) {
+    public static void savePredicates(Map<String,Boolean> predicates,ItemStack stack) {
         if (predicates.isEmpty()) {
             stack.removeTagKey(TAG);
         } else {
             CompoundTag tag = new CompoundTag();
-            for (Pair<String,Boolean> predicate : predicates) {
-                tag.putBoolean(predicate.getFirst(),predicate.getSecond());
+            for (Map.Entry<String,Boolean> predicate : predicates.entrySet()) {
+                tag.putBoolean(predicate.getKey(),predicate.getValue());
             }
             stack.addTagElement(TAG,tag);
         }
@@ -86,9 +93,32 @@ public class FilterMenu extends AbstractContainerMenu {
         return null;
     }
 
-    public void addPredicate(String s,boolean tag) {
-        predicates.add(Pair.of(s,tag));
-        markDirty();
+    public boolean addPredicate(String s,boolean tag) {
+        if (tag) {
+            ITag<Item> tag1 = ForgeRegistries.ITEMS.tags().getTag(TagKey.create(Registries.ITEM, new ResourceLocation(s)));
+            if (!tag1.isEmpty()) {
+                predicates.put(s,true);
+                markDirty();
+                return true;
+            }
+        } else {
+            Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(s));
+            if (item != Items.AIR) {
+                predicates.put(s, false);
+                markDirty();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean removePredicate(String i) {
+        if (predicates.containsKey(i)) {
+            predicates.remove(i);
+            markDirty();
+            return true;
+        }
+        return false;
     }
 
     public void markDirty() {
@@ -99,11 +129,11 @@ public class FilterMenu extends AbstractContainerMenu {
         PacketHandler.sendToClient(new S2CCustomSyncDataPacket(predicates),player);
     }
 
-    public void setPredicates(List<Pair<String,Boolean>> predicates) {
+    public void setPredicates(Map<String,Boolean> predicates) {
         this.predicates = predicates;
     }
 
-    public List<Pair<String, Boolean>> getPredicates() {
+    public Map<String,Boolean> getPredicates() {
         return predicates;
     }
 

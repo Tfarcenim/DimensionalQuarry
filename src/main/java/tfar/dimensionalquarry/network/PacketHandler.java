@@ -8,6 +8,7 @@ import net.minecraftforge.network.simple.SimpleChannel;
 import tfar.dimensionalquarry.DimensionalQuarry;
 import tfar.dimensionalquarry.network.client.S2CCustomSyncDataPacket;
 import tfar.dimensionalquarry.network.server.C2SAddPredicatePacket;
+import tfar.dimensionalquarry.network.server.C2SRemovePredicatePacket;
 
 public class PacketHandler {
 
@@ -25,6 +26,11 @@ public class PacketHandler {
                 C2SAddPredicatePacket::new,
                 C2SAddPredicatePacket::handle);
 
+        INSTANCE.registerMessage(i++,
+                C2SRemovePredicatePacket.class,
+                C2SRemovePredicatePacket::encode,
+                C2SRemovePredicatePacket::new,
+                C2SRemovePredicatePacket::handle);
 
         ///////
 

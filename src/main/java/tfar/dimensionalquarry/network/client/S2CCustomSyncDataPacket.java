@@ -1,27 +1,27 @@
 package tfar.dimensionalquarry.network.client;
 
-import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.FriendlyByteBuf;
+import tfar.dimensionalquarry.client.screen.FilterScreen;
 import tfar.dimensionalquarry.menu.FilterMenu;
 import tfar.dimensionalquarry.network.util.S2CPacketHelper;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 public class S2CCustomSyncDataPacket implements S2CPacketHelper {
-    private final List<Pair<String,Boolean>> predicates;
+    private final Map<String,Boolean> predicates;
 
-    public S2CCustomSyncDataPacket(List<Pair<String,Boolean>> predicates) {
+    public S2CCustomSyncDataPacket(Map<String,Boolean> predicates) {
         this.predicates = predicates;
     }
 
     public S2CCustomSyncDataPacket(FriendlyByteBuf buf) {
         int i = buf.readShort();
-        predicates = new ArrayList<>();
+        predicates = new HashMap<>();
         for(int j = 0; j < i; ++j) {
-            predicates.add(Pair.of(buf.readUtf(),buf.readBoolean()));
+            predicates.put(buf.readUtf(),buf.readBoolean());
         }
     }
 
@@ -30,15 +30,16 @@ public class S2CCustomSyncDataPacket implements S2CPacketHelper {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != null && player.containerMenu instanceof FilterMenu filterMenu) {
             filterMenu.setPredicates(predicates);
+            ((FilterScreen)Minecraft.getInstance().screen).initList(true);
         }
     }
 
     @Override
     public void encode(FriendlyByteBuf buf) {
         buf.writeShort(predicates.size());
-        for (Pair<String, Boolean> stack : predicates) {
-            buf.writeUtf(stack.getFirst());
-            buf.writeBoolean(stack.getSecond());
+        for (Map.Entry<String, Boolean> stack : predicates.entrySet()) {
+            buf.writeUtf(stack.getKey());
+            buf.writeBoolean(stack.getValue());
         }
     }
 }

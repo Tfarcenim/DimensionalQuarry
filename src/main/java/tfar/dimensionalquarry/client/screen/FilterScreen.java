@@ -2,7 +2,6 @@ package tfar.dimensionalquarry.client.screen;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiComponent;
 import net.minecraft.client.gui.components.Button;
@@ -10,32 +9,39 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.ObjectSelectionList;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraftforge.registries.ForgeRegistries;
 import org.lwjgl.glfw.GLFW;
 import tfar.dimensionalquarry.DimensionalQuarry;
 import tfar.dimensionalquarry.menu.FilterMenu;
 import tfar.dimensionalquarry.network.PacketHandler;
 import tfar.dimensionalquarry.network.server.C2SAddPredicatePacket;
+import tfar.dimensionalquarry.network.server.C2SRemovePredicatePacket;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
 
     private EditBox editBox;
 
     private DetailsList list;
+    private Button removePredicateB;
 
 
     public FilterScreen(FilterMenu pMenu, Inventory pPlayerInventory, Component pTitle) {
         super(pMenu, pPlayerInventory, pTitle);
         imageHeight += 56;
-        titleLabelY += 17;
         inventoryLabelY +=56;
     }
     static final ResourceLocation background = new ResourceLocation(DimensionalQuarry.MODID,"textures/screen/filter.png");
@@ -43,19 +49,29 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
     public void containerTick() {
         super.containerTick();
         this.editBox.tick();
+        this.list.tick();
     }
 
 
     @Override
     protected void init() {
         super.init();
+        initList(false);
+        this.addRenderableWidget(Button.builder(Component.literal("+"),this::addPredicate).size(14,14).pos(leftPos+157,topPos+16).build());
+        removePredicateB = Button.builder(Component.literal("-"),this::removePredicate).size(14,14).pos(leftPos+157,topPos+32).build();
+        this.addRenderableWidget(removePredicateB);
+        initEditbox();
+    }
+
+    public void initList(boolean refresh) {
+        if (refresh) {
+            removeWidget(list);
+        }
         this.list = new DetailsList(menu.getPredicates());
         list.setRenderBackground(false);
         list.setLeftPos(leftPos);
         list.setRenderTopAndBottom(false);
         this.addRenderableWidget(this.list);
-        this.addRenderableWidget(Button.builder(Component.literal("+"),this::addPredicate).size(14,14).pos(leftPos+157,topPos+16).build());
-        initEditbox();
     }
 
     public void resize(Minecraft pMinecraft, int pWidth, int pHeight) {
@@ -65,7 +81,15 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
     }
 
     private void addPredicate(Button b) {
-        PacketHandler.sendToServer(new C2SAddPredicatePacket(editBox.getValue(),false));
+        boolean tag = editBox.getValue().startsWith("#");
+        C2SAddPredicatePacket.send(editBox.getValue(),tag);
+    }
+
+    private void removePredicate(Button b) {
+        DetailsList.Entry selected = list.getSelected();
+        if (selected != null) {
+        C2SRemovePredicatePacket.send(selected.string);
+        }
     }
 
     protected void initEditbox() {
@@ -121,47 +145,64 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
 
 
     class DetailsList extends ObjectSelectionList<FilterScreen.DetailsList.Entry> {
-        public DetailsList(List<Pair<String, Boolean>> predicates) {
-            super(FilterScreen.this.minecraft, FilterScreen.this.imageWidth, FilterScreen.this.imageHeight, topPos + 38, FilterScreen.this.height, 24);
 
-            for (Pair<String, Boolean> predicate : predicates) {
-                this.addEntry(new Entry(predicate.getSecond()));
+        private int frame;
+        public DetailsList(Map<String, Boolean> predicates) {
+            super(FilterScreen.this.minecraft, FilterScreen.this.imageWidth, FilterScreen.this.imageHeight, topPos + 44, FilterScreen.this.height, 20);
+
+            for (Map.Entry<String, Boolean> predicate : predicates.entrySet()) {
+                String s = predicate.getKey();
+                boolean tag = predicate.getValue();
+                if (tag) {
+                    addEntry(new Entry(ForgeRegistries.ITEMS.tags().getTag(TagKey.create(Registries.ITEM,new ResourceLocation(predicate.getKey()))).stream().map(Item::getDefaultInstance).collect(Collectors.toList()),s));
+                } else {
+                    this.addEntry(new Entry(List.of(BuiltInRegistries.ITEM.get(new ResourceLocation(predicate.getKey())).getDefaultInstance()),s));
+                }
             }
-
         }
 
         public void setSelected(@Nullable FilterScreen.DetailsList.Entry pEntry) {
             super.setSelected(pEntry);
            // FilterScreen.this.updateButtonValidity();
         }
+           public boolean isFocused() {
+           return FilterScreen.this.getFocused() == this;
+        }
 
-     //   protected boolean isFocused() {
-    //       return FilterScreen.this.getFocused() == this;
-     //   }
+        public void tick() {
+            ++frame;
+        }
 
         protected int getScrollbarPosition() {
-            return this.width - 70;
+            return 100000;
         }
 
         class Entry extends ObjectSelectionList.Entry<FilterScreen.DetailsList.Entry> {
-
-            private boolean tag;
-
-            public Entry(boolean tag) {
-                this.tag = tag;
+            private final List<ItemStack> stacks;
+            private final String string;
+            public Entry(List<ItemStack> stacks,String string) {
+                this.stacks = stacks;
+                this.string = string;
             }
 
             public void render(PoseStack pPoseStack, int pIndex, int pTop, int pLeft, int pWidth, int pHeight, int pMouseX, int pMouseY, boolean pIsMouseOver, float pPartialTick) {
-                ItemStack itemstack = new ItemStack(Items.COBBLESTONE);
-                this.blitSlot(pPoseStack, pLeft, pTop, itemstack);
-                FilterScreen.this.font.draw(pPoseStack, itemstack.getHoverName(), (float)(pLeft + 18 + 5), (float)(pTop + 3), 0xffffff);
-                Component component = tag ? Component.literal("Tag") : Component.literal("Item");
+                ItemStack itemstack = getStack();
+                int offset = 25;
+                int color = 0xff0000;
+                this.blitSlot(pPoseStack, pLeft+offset, pTop, itemstack);
+                FilterScreen.this.font.draw(pPoseStack, itemstack.getHoverName(), pLeft + offset + 20, pTop + 3, color);
+                Component component = stacks.size() > 1 ? Component.literal("Tag") : Component.literal("Item");
 
-                FilterScreen.this.font.draw(pPoseStack, component, (float)(pLeft + 2 + 213 - FilterScreen.this.font.width(component)), (float)(pTop + 3), 0xffffff);
+                FilterScreen.this.font.draw(pPoseStack, component, pLeft + 190 - FilterScreen.this.font.width(component), pTop + 3, color);
+            }
+
+            protected ItemStack getStack() {
+                int o = (frame/20) % stacks.size();
+                return stacks.get(o);
             }
 
             public Component getNarration() {
-                ItemStack itemstack = new ItemStack(Items.COBBLESTONE);
+                ItemStack itemstack = getStack();
                 return !itemstack.isEmpty() ? Component.translatable("narrator.select", itemstack.getHoverName()) : CommonComponents.EMPTY;
             }
 
@@ -175,9 +216,9 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
             }
 
             private void blitSlot(PoseStack pPoseStack, int pX, int pY, ItemStack pStack) {
-                this.blitSlotBg(pPoseStack, pX + 1, pY + 1);
+                this.blitSlotBg(pPoseStack, pX, pY);
                 if (!pStack.isEmpty()) {
-                    FilterScreen.this.itemRenderer.renderGuiItem(pPoseStack,pStack, pX + 2, pY + 2);
+                    FilterScreen.this.itemRenderer.renderGuiItem(pPoseStack,pStack, pX + 1, pY + 1);
                 }
 
             }
