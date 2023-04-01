@@ -5,6 +5,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
@@ -38,12 +39,11 @@ import org.jetbrains.annotations.Nullable;
 import tfar.dimensionalquarry.init.ModOs;
 import tfar.dimensionalquarry.inv.DimenEnergyStorage;
 import tfar.dimensionalquarry.menu.DimensionalQuarryMenu;
+import tfar.dimensionalquarry.menu.FilterMenu;
 import tfar.dimensionalquarry.util.DimensionalUtils;
+import tfar.dimensionalquarry.util.StackPredicate;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class DimensionalQuarryBlockEntity extends BlockEntity implements MenuProvider {
 
@@ -54,12 +54,21 @@ public class DimensionalQuarryBlockEntity extends BlockEntity implements MenuPro
 
     private List<ItemStack> backLog = new ArrayList<>();
     final ItemStack tool = new ItemStack(Items.NETHERITE_PICKAXE);
+
+    private List<StackPredicate> stackPredicates = new ArrayList<>();
+
+    private boolean itemBlacklist = true;
     private int cooldown = 0;
 
     private final ItemStackHandler handler = new ItemStackHandler(2){
         @Override
         protected void onContentsChanged(int slot) {
             super.onContentsChanged(slot);
+
+            if (slot == 0) {
+                cacheFilter(getStackInSlot(slot));
+            }
+
             if (slot == 1) {
                 bakeEnchantments(getStackInSlot(slot));
             }
@@ -70,8 +79,33 @@ public class DimensionalQuarryBlockEntity extends BlockEntity implements MenuPro
         protected void onLoad() {
             super.onLoad();
             bakeEnchantments(getStackInSlot(1));
+            cacheFilter(getStackInSlot(0));
+        }
+
+        @Override
+        public boolean isItemValid(int slot, @NotNull ItemStack stack) {
+            if (slot == 0) {
+                return stack.is(ModOs.FILTER);
+            }
+
+            if (slot ==1) {
+                return stack.is(Items.ENCHANTED_BOOK);
+            }
+
+            return super.isItemValid(slot, stack);
         }
     };
+
+    protected void cacheFilter(ItemStack stack) {
+        stackPredicates.clear();
+
+        CompoundTag tag = stack.getTagElement(FilterMenu.TAG);
+        if (tag != null) {
+            for (String s : tag.getAllKeys()) {
+                stackPredicates.add(new StackPredicate(new ResourceLocation(s),tag.getBoolean(s)));
+            }
+        }
+    }
 
     protected void bakeEnchantments(ItemStack book) {
         tool.setTag(null);
@@ -146,7 +180,7 @@ public class DimensionalQuarryBlockEntity extends BlockEntity implements MenuPro
 
     private void setTarget(ResourceKey<Level> original) {
         if (!level.isClientSide) {
-            miningIn = DimensionalUtils.getOrCreateCloneDimension(level.getServer(),level.getServer().getLevel(OVERWORLD));
+            miningIn = DimensionalUtils.getOrCreateCloneDimension(level.getServer(), (ServerLevel) level);
         }
     }
 
@@ -164,7 +198,33 @@ public class DimensionalQuarryBlockEntity extends BlockEntity implements MenuPro
                         .withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockentity)
                         .withOptionalParameter(LootContextParams.THIS_ENTITY, null)
                         .withParameter(LootContextParams.TOOL, tool);
-                backLog = state.getDrops(lootcontext$builder);
+
+                List<ItemStack> temp = state.getDrops(lootcontext$builder);
+
+                for (Iterator<ItemStack> iterator = temp.iterator(); iterator.hasNext(); ) {
+                    ItemStack stack = iterator.next();
+                    boolean anyMatch = false;
+                    for (StackPredicate stackPredicate : stackPredicates) {
+                        if (itemBlacklist) {
+                            if (stackPredicate.test(stack)) {
+                                iterator.remove();
+                                break;
+                            }
+                        } else {
+                            if (stackPredicate.test(stack)) {
+                                anyMatch = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!anyMatch && !itemBlacklist) {
+                        iterator.remove();
+                    }
+                }
+
+                backLog = temp;
+
                 energyStorage.extractEnergy(energyCost,false);
                 movePos();
                 setChanged();

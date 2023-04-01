@@ -8,22 +8,27 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
+import java.util.function.Predicate;
 
-public class StackPredicate {
+public class StackPredicate implements Predicate<ItemStack> {
 
     private final ResourceLocation location;
     private final boolean tag;
 
-    private List<Item> cache;
+    private Item itemcache;
 
     public StackPredicate(ResourceLocation location, boolean tag) {
         this.location = location;
         this.tag = tag;
+
+        if (!tag) {
+            itemcache = BuiltInRegistries.ITEM.get(location);
+        }
     }
 
-    public boolean matches(ItemStack stack) {
+    public boolean test(ItemStack stack) {
         if (!tag) {
-            return BuiltInRegistries.ITEM.getKey(stack.getItem()).equals(location);
+            return stack.is(itemcache);
         }
         TagKey<Item> itemTagKey = TagKey.create(Registries.ITEM, location);
         return stack.is(itemTagKey);

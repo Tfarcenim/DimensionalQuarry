@@ -22,13 +22,13 @@ import net.minecraftforge.registries.ForgeRegistries;
 import org.lwjgl.glfw.GLFW;
 import tfar.dimensionalquarry.DimensionalQuarry;
 import tfar.dimensionalquarry.menu.FilterMenu;
-import tfar.dimensionalquarry.network.PacketHandler;
 import tfar.dimensionalquarry.network.server.C2SAddPredicatePacket;
 import tfar.dimensionalquarry.network.server.C2SRemovePredicatePacket;
 
 import javax.annotation.Nullable;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
@@ -57,8 +57,8 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
     protected void init() {
         super.init();
         initList(false);
-        this.addRenderableWidget(Button.builder(Component.literal("+"),this::addPredicate).size(14,14).pos(leftPos+157,topPos+16).build());
-        removePredicateB = Button.builder(Component.literal("-"),this::removePredicate).size(14,14).pos(leftPos+157,topPos+32).build();
+        this.addRenderableWidget(Button.builder(Component.literal("+"),this::addPredicate).size(14,14).pos(leftPos+134,topPos+17).build());
+        removePredicateB = Button.builder(Component.literal("-"),this::removePredicate).size(14,14).pos(leftPos+134,topPos+32).build();
         this.addRenderableWidget(removePredicateB);
         initEditbox();
     }
@@ -81,8 +81,15 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
     }
 
     private void addPredicate(Button b) {
-        boolean tag = editBox.getValue().startsWith("#");
-        C2SAddPredicatePacket.send(editBox.getValue(),tag);
+
+        ItemStack stack = menu.getItemStackHandler().getStackInSlot(0);
+
+        if (!stack.isEmpty()) {
+            C2SAddPredicatePacket.send(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(), false);
+        } else {
+            boolean tag = editBox.getValue().startsWith("#");
+            C2SAddPredicatePacket.send(editBox.getValue(), tag);
+        }
     }
 
     private void removePredicate(Button b) {
@@ -95,7 +102,7 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
     protected void initEditbox() {
         int i = (this.width - this.imageWidth) / 2;
         int j = (this.height - this.imageHeight) / 2;
-        this.editBox = new EditBox(this.font, i + 8, j + 17, 145, 12, Component.translatable("container.repair"));
+        this.editBox = new EditBox(this.font, i + 8, j + 18, 123, 12, Component.translatable("container.repair"));
         this.editBox.setCanLoseFocus(true);
         this.editBox.setTextColor(-1);
         this.editBox.setTextColorUneditable(-1);
@@ -148,7 +155,7 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
 
         private int frame;
         public DetailsList(Map<String, Boolean> predicates) {
-            super(FilterScreen.this.minecraft, FilterScreen.this.imageWidth, FilterScreen.this.imageHeight, topPos + 44, FilterScreen.this.height, 20);
+            super(FilterScreen.this.minecraft, FilterScreen.this.imageWidth, FilterScreen.this.imageHeight, topPos + 48,topPos + 48 + 78, 18);
 
             for (Map.Entry<String, Boolean> predicate : predicates.entrySet()) {
                 String s = predicate.getKey();
@@ -161,10 +168,18 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
             }
         }
 
-        public void setSelected(@Nullable FilterScreen.DetailsList.Entry pEntry) {
-            super.setSelected(pEntry);
-           // FilterScreen.this.updateButtonValidity();
+
+        protected void renderItem(PoseStack pPoseStack, int pMouseX, int pMouseY, float pPartialTick, int pIndex, int pLeft, int pTop, int pWidth, int pHeight) {
+            FilterScreen.DetailsList.Entry e = this.getEntry(pIndex);
+            e.renderBack(pPoseStack, pIndex, pTop, pLeft, pWidth, pHeight, pMouseX, pMouseY, Objects.equals(this.getHovered(), e), pPartialTick);
+            if (this.renderSelection && this.isSelectedItem(pIndex)) {
+                int i = this.isFocused() ? 0xffffffff : 0xff808080;//color of border
+                this.renderSelection(pPoseStack, pTop, pWidth, pHeight, i, 0xffffcccc);//color of background selection
+            }
+
+            e.render(pPoseStack, pIndex, pTop, pLeft, pWidth, pHeight, pMouseX, pMouseY, Objects.equals(this.getHovered(), e), pPartialTick);
         }
+
            public boolean isFocused() {
            return FilterScreen.this.getFocused() == this;
         }
@@ -173,8 +188,13 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
             ++frame;
         }
 
+        @Override
+        public int getRowWidth() {
+            return imageWidth - 6;
+        }
+
         protected int getScrollbarPosition() {
-            return 100000;
+            return 1000;//this.width/2 + 60;
         }
 
         class Entry extends ObjectSelectionList.Entry<FilterScreen.DetailsList.Entry> {
@@ -187,14 +207,15 @@ public class FilterScreen extends AbstractContainerScreen<FilterMenu> {
 
             public void render(PoseStack pPoseStack, int pIndex, int pTop, int pLeft, int pWidth, int pHeight, int pMouseX, int pMouseY, boolean pIsMouseOver, float pPartialTick) {
                 ItemStack itemstack = getStack();
-                int offset = 25;
+                int offset = -1;
                 int color = 0xff0000;
-                this.blitSlot(pPoseStack, pLeft+offset, pTop, itemstack);
-                FilterScreen.this.font.draw(pPoseStack, itemstack.getHoverName(), pLeft + offset + 20, pTop + 3, color);
+                this.blitSlot(pPoseStack, pLeft+offset, pTop - 2, itemstack);
+                FilterScreen.this.font.draw(pPoseStack, itemstack.getHoverName(), pLeft + offset + 20, pTop + 4, color);
                 Component component = stacks.size() > 1 ? Component.literal("Tag") : Component.literal("Item");
 
-                FilterScreen.this.font.draw(pPoseStack, component, pLeft + 190 - FilterScreen.this.font.width(component), pTop + 3, color);
+                FilterScreen.this.font.draw(pPoseStack, component, pLeft + 166 - FilterScreen.this.font.width(component), pTop + 3, color);
             }
+
 
             protected ItemStack getStack() {
                 int o = (frame/20) % stacks.size();

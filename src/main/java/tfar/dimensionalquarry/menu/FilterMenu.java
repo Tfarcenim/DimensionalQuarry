@@ -14,6 +14,9 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraftforge.items.ItemStackHandler;
+import net.minecraftforge.items.SlotItemHandler;
+import net.minecraftforge.items.wrapper.RecipeWrapper;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.tags.ITag;
 import org.jetbrains.annotations.Nullable;
@@ -30,6 +33,8 @@ public class FilterMenu extends AbstractContainerMenu {
 
     ItemStack filter;
 
+    private final ItemStackHandler itemStackHandler = new ItemStackHandler();
+
     public static final String TAG = "predicates";
 
     protected FilterMenu(@Nullable MenuType<?> pMenuType, int pContainerId) {
@@ -39,6 +44,7 @@ public class FilterMenu extends AbstractContainerMenu {
     public FilterMenu(int i, Inventory inventory, ItemStack stack) {
         this(ModOs.FILTER_M,i);
         this.filter = stack;
+        addSlot(new SlotItemHandler(itemStackHandler,0, 152,18));
         addPlayerSlots(inventory);
         predicates = loadPredicates(filter);
     }
@@ -135,6 +141,17 @@ public class FilterMenu extends AbstractContainerMenu {
 
     public Map<String,Boolean> getPredicates() {
         return predicates;
+    }
+
+    public ItemStackHandler getItemStackHandler() {
+        return itemStackHandler;
+    }
+
+    public void removed(Player pPlayer) {
+        super.removed(pPlayer);
+        if (!pPlayer.level.isClientSide) {
+            this.clearContainer(pPlayer, new RecipeWrapper(itemStackHandler));
+        }
     }
 
     @Override
